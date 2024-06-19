@@ -1,6 +1,7 @@
 import {
   FromNumUuid,
   FromRadioUuid,
+  LogRadioUuid,
   ServiceUuid,
   ToRadioUuid,
 } from "../constants.js";
@@ -34,6 +35,9 @@ export class BleConnection extends MeshDevice {
   /** Short Description */
   private fromNumCharacteristic: BluetoothRemoteGATTCharacteristic | undefined;
 
+  /** Logs from radio (device) */
+  private logRadioCharacteristic: BluetoothRemoteGATTCharacteristic | undefined;
+
   private timerUpdateFromRadio: NodeJS.Timeout | null = null;
 
   constructor(configId?: number) {
@@ -49,11 +53,12 @@ export class BleConnection extends MeshDevice {
     this.toRadioCharacteristic = undefined;
     this.fromRadioCharacteristic = undefined;
     this.fromNumCharacteristic = undefined;
+    this.logRadioCharacteristic = undefined;
     // this.pendingRead = false;
 
     this.log.debug(
       Types.Emitter[Types.Emitter.Constructor],
-      "🔷 BleConnection instantiated",
+      "🔷 BleConnection instantiated"
     );
   }
 
@@ -82,7 +87,7 @@ export class BleConnection extends MeshDevice {
     return navigator.bluetooth.requestDevice(
       filter ?? {
         filters: [{ services: [ServiceUuid] }],
-      },
+      }
     );
   }
 
@@ -105,7 +110,7 @@ export class BleConnection extends MeshDevice {
     this.device.addEventListener("gattserverdisconnected", () => {
       this.log.info(
         Types.Emitter[Types.Emitter.Connect],
-        "Device disconnected",
+        "Device disconnected"
       );
       this.updateDeviceStatus(Types.DeviceStatusEnum.DeviceDisconnected);
       this.complete();
@@ -117,14 +122,14 @@ export class BleConnection extends MeshDevice {
       .then((server) => {
         this.log.info(
           Types.Emitter[Types.Emitter.Connect],
-          `✅ Got GATT Server for device: ${server.device.id}`,
+          `✅ Got GATT Server for device: ${server.device.id}`
         );
         this.gattServer = server;
       })
       .catch((e: Error) => {
         this.log.error(
           Types.Emitter[Types.Emitter.Connect],
-          `❌ Failed to connect: ${e.message}`,
+          `❌ Failed to connect: ${e.message}`
         );
       });
 
@@ -133,47 +138,53 @@ export class BleConnection extends MeshDevice {
       .then((service) => {
         this.log.info(
           Types.Emitter[Types.Emitter.Connect],
-          `✅ Got GATT Service for device: ${service.device.id}`,
+          `✅ Got GATT Service for device: ${service.device.id}`
         );
         this.service = service;
       })
       .catch((e: Error) => {
         this.log.error(
           Types.Emitter[Types.Emitter.Connect],
-          `❌ Failed to get primary service: q${e.message}`,
+          `❌ Failed to get primary service: q${e.message}`
         );
       });
 
-    [ToRadioUuid, FromRadioUuid, FromNumUuid].map(async (uuid) => {
-      await this.service
-        ?.getCharacteristic(uuid)
-        .then((characteristic) => {
-          this.log.info(
-            Types.Emitter[Types.Emitter.Connect],
-            `✅ Got Characteristic ${characteristic.uuid} for device: ${characteristic.uuid}`,
-          );
-          switch (uuid) {
-            case ToRadioUuid: {
-              this.toRadioCharacteristic = characteristic;
-              break;
+    [ToRadioUuid, FromRadioUuid, FromNumUuid, LogRadioUuid].map(
+      async (uuid) => {
+        await this.service
+          ?.getCharacteristic(uuid)
+          .then((characteristic) => {
+            this.log.info(
+              Types.Emitter[Types.Emitter.Connect],
+              `✅ Got Characteristic ${characteristic.uuid} for device: ${characteristic.uuid}`
+            );
+            switch (uuid) {
+              case ToRadioUuid: {
+                this.toRadioCharacteristic = characteristic;
+                break;
+              }
+              case FromRadioUuid: {
+                this.fromRadioCharacteristic = characteristic;
+                break;
+              }
+              case FromNumUuid: {
+                this.fromNumCharacteristic = characteristic;
+                break;
+              }
+              case LogRadioUuid: {
+                this.logRadioCharacteristic = characteristic;
+                break;
+              }
             }
-            case FromRadioUuid: {
-              this.fromRadioCharacteristic = characteristic;
-              break;
-            }
-            case FromNumUuid: {
-              this.fromNumCharacteristic = characteristic;
-              break;
-            }
-          }
-        })
-        .catch((e: Error) => {
-          this.log.error(
-            Types.Emitter[Types.Emitter.Connect],
-            `❌ Failed to get toRadio characteristic: q${e.message}`,
-          );
-        });
-    });
+          })
+          .catch((e: Error) => {
+            this.log.error(
+              Types.Emitter[Types.Emitter.Connect],
+              `❌ Failed to get toRadio characteristic: q${e.message}`
+            );
+          });
+      }
+    );
 
     await this.fromNumCharacteristic?.startNotifications(); // TODO: catch
 
@@ -181,7 +192,23 @@ export class BleConnection extends MeshDevice {
       "characteristicvaluechanged",
       () => {
         this.readFromRadio();
-      },
+      }
+    );
+
+    await this.logRadioCharacteristic?.startNotifications(); // TODO: catch
+
+    this.fromNumCharacteristic?.addEventListener(
+      "characteristicvaluechanged",
+      (event) => {
+        debugger;
+        const logMessage = (event.target as BluetoothRemoteGATTCharacteristic)
+          .value;
+
+        this.log.error(
+          Types.Emitter[Types.Emitter.RadioLog],
+          `📡 ${logMessage}`
+        );
+      }
     );
 
     this.updateDeviceStatus(Types.DeviceStatusEnum.DeviceConnected);
@@ -236,7 +263,7 @@ export class BleConnection extends MeshDevice {
           readBuffer = new ArrayBuffer(0);
           this.log.error(
             Types.Emitter[Types.Emitter.ReadFromRadio],
-            `❌ ${e.message}`,
+            `❌ ${e.message}`
           );
         });
     }
