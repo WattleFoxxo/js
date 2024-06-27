@@ -131,6 +131,16 @@ export class EventSystem {
   >();
 
   /**
+   * Fires when a new MeshPacket message containing a Routing packet has been
+   * received from device
+   *
+   * @event onRoutingPacket
+   */
+  public readonly onAckPacket = new SimpleEventDispatcher<
+    PacketMetadata<Protobuf.Mesh.Data>
+  >();
+
+  /**
    * Fires when the device receives a Metadata packet
    *
    * @event onDeviceMetadataPacket

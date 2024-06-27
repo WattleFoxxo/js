@@ -1007,12 +1007,18 @@ export abstract class MeshDevice {
           ...packetMetadata,
           data: routingPacket,
         });
+
         switch (routingPacket.variant.case) {
           case "errorReason": {
             if (
               routingPacket.variant.value === Protobuf.Mesh.Routing_Error.NONE
             ) {
               this.queue.processAck(dataPacket.requestId);
+
+              this.events.onAckPacket.dispatch({
+                ...packetMetadata,
+                data: dataPacket,
+              });
             } else {
               this.queue.processError({
                 id: dataPacket.requestId,
